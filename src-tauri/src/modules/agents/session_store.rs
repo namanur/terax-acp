@@ -1,4 +1,6 @@
+#![allow(dead_code)]
 use rusqlite::{params, Connection};
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -582,7 +584,7 @@ impl SessionStore {
         let now_ts = chrono::Utc::now().timestamp() as u64;
         let mut recovered = 0u32;
         let mut new_unreachable = 0u32;
-        let mut auto_gc = 0u32;
+
 
         // 1. Recovery: unreachable sessions that are now in active_ids → idle
         {
@@ -627,14 +629,14 @@ impl SessionStore {
         }
 
         // 3. Auto-GC: expired sessions older than 30 days
-        {
+        let auto_gc = {
             let cutoff = now_ts.saturating_sub(30 * 24 * 3600);
             let deleted = conn.execute(
                 "DELETE FROM sessions WHERE status = 'expired' AND updated_at < ?",
                 params![cutoff],
             )?;
-            auto_gc = deleted as u32;
-        }
+            deleted as u32
+        };
 
         log::info!(
             "reconcile: recovered={} new_unreachable={} auto_gc={}",

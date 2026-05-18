@@ -1,6 +1,7 @@
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use std::time::Instant;
 
 /// Maximum size of the debug ring buffer in bytes (10MB).
 const DEFAULT_MAX_BYTES: usize = 10 * 1024 * 1024;

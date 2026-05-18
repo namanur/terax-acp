@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -45,10 +47,10 @@ impl LegacySessionStore {
     /// List legacy sessions from the JSON file. Read-only snapshot.
     pub fn list_sessions(&self) -> Result<Vec<LegacySession>, LegacyStoreError> {
         let raw = std::fs::read_to_string(&self.path)
-            .map_err(|e| LegacyStoreError::Io(e))?;
+            .map_err(LegacyStoreError::Io)?;
 
         let parsed: LegacyStoreFormat = serde_json::from_str(&raw)
-            .map_err(|e| LegacyStoreError::Json(e))?;
+            .map_err(LegacyStoreError::Json)?;
 
         let sessions: Vec<LegacySession> = parsed
             .into_iter()
@@ -79,10 +81,10 @@ impl LegacySessionStore {
         session_id: &str,
     ) -> Result<Vec<serde_json::Value>, LegacyStoreError> {
         let raw = std::fs::read_to_string(&self.path)
-            .map_err(|e| LegacyStoreError::Io(e))?;
+            .map_err(LegacyStoreError::Io)?;
 
         let parsed: LegacyStoreFormat = serde_json::from_str(&raw)
-            .map_err(|e| LegacyStoreError::Json(e))?;
+            .map_err(LegacyStoreError::Json)?;
 
         parsed
             .get(session_id)
@@ -123,7 +125,7 @@ fn truncate_preview(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         let mut truncated: String = s.chars().take(max_len).collect();
-        truncated.push_str("…");
+        truncated.push('…');
         truncated
     }
 }

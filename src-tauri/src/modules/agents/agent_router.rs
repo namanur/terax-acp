@@ -1,12 +1,13 @@
+#![allow(dead_code)]
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use super::capability_probe::{CapabilityCache, ProbeResult};
+use super::capability_probe::CapabilityCache;
 use super::restoration::RestorationError;
 use super::session_store::{self, SessionStore, SessionStoreError};
 
@@ -22,6 +23,12 @@ pub struct AgentContext {
     pub workspace_files: Vec<String>,
 }
 
+// Type alias to reduce complexity of the streaming return type
+/// Boxed future that yields optional token results.
+pub type NextTokenFuture<'a> = std::pin::Pin<
+    Box<dyn std::future::Future<Output = Option<Result<String, RouterError>>> + Send + 'a>,
+>;
+
 // ---------------------------------------------------------------------------
 // Response Stream
 // ---------------------------------------------------------------------------
@@ -29,9 +36,7 @@ pub struct AgentContext {
 /// Streaming response from a backend.
 /// Implementations yield tokens as they arrive.
 pub trait ResponseStream: Send {
-    fn next_token(
-        &mut self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Result<String, RouterError>>> + Send + '_>>;
+    fn next_token(&mut self) -> NextTokenFuture<'_>;
     fn is_complete(&self) -> bool;
 }
 
@@ -394,8 +399,6 @@ impl AgentState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::pin::Pin;
-    use std::future::Future;
 
     // -- Stub backends for testing ---------------------------------------
 

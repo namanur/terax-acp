@@ -1,8 +1,10 @@
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use uuid::Uuid;
 
-use super::session_store::{self, SessionRecord, SessionStatus, TitleSource};
+use super::session_store::{self, SessionStatus, TitleSource};
 
 // ---------------------------------------------------------------------------
 // Restoration Contract
@@ -384,16 +386,16 @@ pub fn reconcile(
 
     // 2. Recovery: unreachable → idle if session is back in acp_active_ids
     for session in &local_sessions {
-        if session.status == SessionStatus::Unreachable {
-            if acp_active_ids.contains(&session.session_id) {
-                store.set_status(&session.session_id, SessionStatus::Idle)?;
-                report.recovered.push(session.session_id.clone());
-                log::info!(
-                    target: "restore",
-                    "RECOVERED trace_id={trace_id} session_id={} unreachable→idle",
-                    session.session_id
-                );
-            }
+        if session.status == SessionStatus::Unreachable
+            && acp_active_ids.contains(&session.session_id)
+        {
+            store.set_status(&session.session_id, SessionStatus::Idle)?;
+            report.recovered.push(session.session_id.clone());
+            log::info!(
+                target: "restore",
+                "RECOVERED trace_id={trace_id} session_id={} unreachable→idle",
+                session.session_id
+            );
         }
     }
 
@@ -402,18 +404,17 @@ pub fn reconcile(
         if matches!(
             session.status,
             SessionStatus::Active | SessionStatus::Idle
-        ) {
-            if !acp_active_ids.contains(&session.session_id) {
-                store.set_status(&session.session_id, SessionStatus::Unreachable)?;
-                report
-                    .newly_unreachable
-                    .push(session.session_id.clone());
-                log::warn!(
-                    target: "restore",
-                    "UNREACHABLE trace_id={trace_id} session_id={} active/idle→unreachable",
-                    session.session_id
-                );
-            }
+        ) && !acp_active_ids.contains(&session.session_id)
+        {
+            store.set_status(&session.session_id, SessionStatus::Unreachable)?;
+            report
+                .newly_unreachable
+                .push(session.session_id.clone());
+            log::warn!(
+                target: "restore",
+                "UNREACHABLE trace_id={trace_id} session_id={} active/idle→unreachable",
+                session.session_id
+            );
         }
     }
 
@@ -509,7 +510,7 @@ mod tests {
         let contract = RestorationContract::default();
         assert!(contract.dropped.iter().any(|d| d.name.contains("shell")));
         assert!(contract.dropped.iter().any(|d| d.name.contains("Scroll")));
-        assert_eq!(contract.must.message_history, true);
+        assert!(contract.must.message_history);
     }
 
     #[test]
@@ -524,7 +525,7 @@ mod tests {
             RestorationOutcome::Full(contract) => {
                 assert_eq!(contract.must.title.as_deref(), Some("My Session"));
                 assert_eq!(contract.must.agent_id, "claude-code");
-                assert_eq!(contract.must.message_history, true);
+                assert!(contract.must.message_history);
             }
             _ => panic!("Expected Full restoration"),
         }

@@ -2,12 +2,10 @@
 //!
 //! These are registered in lib.rs via tauri::generate_handler![].
 
-use std::sync::Arc;
 use tauri::State;
 
-use super::agent_router::{AgentContext, AgentState, ApprovalOutcome, ExecutionMode, SessionHandle, SessionInfo};
+use super::agent_router::{AgentContext, AgentState, ExecutionMode, SessionInfo};
 use super::restoration::{self, RestorationOutcome};
-use super::session_store::SessionRecord;
 
 // ---------------------------------------------------------------------------
 // Command implementations
@@ -173,8 +171,8 @@ pub async fn agent_debug_clear(
 
 #[tauri::command]
 pub async fn agent_session_get_config(
-    state: State<'_, AgentState>,
-    session_id: String,
+    _state: State<'_, AgentState>,
+    _session_id: String,
 ) -> Result<super::session_config::SessionConfig, String> {
     // Get capabilities to check what's available
     // let cache = state.capability_cache.lock().unwrap();
@@ -184,9 +182,9 @@ pub async fn agent_session_get_config(
 
 #[tauri::command]
 pub async fn agent_session_set_mode(
-    state: State<'_, AgentState>,
-    session_id: String,
-    mode_id: String,
+    _state: State<'_, AgentState>,
+    _session_id: String,
+    _mode_id: String,
 ) -> Result<(), String> {
     // ... validate and set mode
     Err("Not yet implemented".to_string())
@@ -194,9 +192,9 @@ pub async fn agent_session_set_mode(
 
 #[tauri::command]
 pub async fn agent_session_set_model(
-    state: State<'_, AgentState>,
-    session_id: String,
-    model_id: String,
+    _state: State<'_, AgentState>,
+    _session_id: String,
+    _model_id: String,
 ) -> Result<(), String> {
     // ... validate and set model
     Err("Not yet implemented".to_string())
@@ -204,8 +202,8 @@ pub async fn agent_session_set_model(
 
 #[tauri::command]
 pub async fn agent_list_models(
-    state: State<'_, AgentState>,
-    agent_id: String,
+    _state: State<'_, AgentState>,
+    _agent_id: String,
 ) -> Result<Vec<super::session_config::ModelInfo>, String> {
     // ... query agent for available models
     Err("Not yet implemented".to_string())
