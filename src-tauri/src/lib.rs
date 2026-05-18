@@ -1,0 +1,192 @@
+mod modules;
+
+use modules::{fs, git, net, pty, secrets, shell, workspace};
+use modules::agents;
+use std::path::PathBuf;
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_window_state::StateFlags;
+
+#[tauri::command]
+async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>) -> Result<(), String> {
+    let url_path = match tab.as_deref() {
+        Some(t) if !t.is_empty() => format!("settings.html?tab={}", t),
+        _ => "settings.html".to_string(),
+    };
+
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.set_focus();
+        if let Some(t) = tab.as_deref().filter(|s| !s.is_empty()) {
+            // emit() serializes via JSON — no string-escape footgun, unlike
+            // eval() with format!(). Frontend listens via Tauri event API.
+            let _ = window.emit("terax:settings-tab", t);
+        }
+        return Ok(());
+    }
+
+    let mut builder = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App(url_path.into()))
+        .title("Settings")
+        .inner_size(720.0, 520.0)
+        .min_inner_size(720.0, 520.0)
+        .max_inner_size(720.0, 520.0)
+        .resizable(false)
+        .visible(false)
+        // Keep settings above the main app window so it doesn't get hidden
+        // when the user clicks back into the editor or terminal (#33).
+        .always_on_top(true);
+
+    // Tie lifecycle to the main window so settings minimizes/closes with it.
+    if let Some(main) = app.get_webview_window("main") {
+        builder = builder.parent(&main).map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+
+    // On Linux/Windows we render our own titlebar, so drop native chrome
+    // and make the window transparent.
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    let builder = builder.decorations(false).transparent(true);
+
+    let window = builder.build().map_err(|e| e.to_string())?;
+
+    // Some Linux compositors (GNOME/Mutter with CSD-by-default) ignore the
+    // builder-time decorations flag — re-assert it after realize.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = window.set_decorations(false);
+    }
+    let _ = window;
+    Ok(())
+}
+
+fn db_path() -> PathBuf {
+    let mut path = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push("terax");
+    std::fs::create_dir_all(&path).ok();
+    path.push("terax-acp-sessions.db");
+    path
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // Skip restoring VISIBLE — frontend calls window.show() after first
+        // paint so the user never sees a transparent window-shadow flash on
+        // Windows/Linux.
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                .build(),
+        )
+        .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_os::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(tauri_plugin_log::log::LevelFilter::Info)
+                .build(),
+        )
+        .plugin(tauri_plugin_opener::init())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                log::info!("shutdown requested — flushing debounce, checkpointing WAL");
+                if let Some(state) = window.app_handle().try_state::<agents::agent_router::AgentState>() {
+                    state.shutdown();
+                }
+            }
+        })
+        .manage({
+            let path = db_path();
+            log::info!("agent state db path: {}", path.display());
+            agents::agent_router::AgentState::new(&path)
+                .expect("failed to initialize agent state")
+        })
+        .manage(pty::PtyState::default())
+        .manage(shell::ShellState::default())
+        .manage(secrets::SecretsState::default())
+        .manage({
+            let registry = workspace::WorkspaceRegistry::default();
+            workspace::bootstrap_registry(&registry);
+            registry
+        })
+        .invoke_handler(tauri::generate_handler![
+            pty::pty_open,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_close,
+            fs::tree::list_subdirs,
+            fs::tree::fs_read_dir,
+            fs::file::fs_read_file,
+            fs::file::fs_write_file,
+            fs::file::fs_stat,
+            fs::file::fs_canonicalize,
+            fs::mutate::fs_create_file,
+            fs::mutate::fs_create_dir,
+            fs::mutate::fs_rename,
+            fs::mutate::fs_delete,
+            fs::search::fs_search,
+            fs::search::fs_list_files,
+            fs::grep::fs_grep,
+            fs::grep::fs_glob,
+            git::commands::git_resolve_repo,
+            git::commands::git_panel_snapshot,
+            git::commands::git_status,
+            git::commands::git_diff,
+            git::commands::git_diff_content,
+            git::commands::git_stage,
+            git::commands::git_unstage,
+            git::commands::git_discard,
+            git::commands::git_commit,
+            git::commands::git_fetch,
+            git::commands::git_pull_ff_only,
+            git::commands::git_push,
+            git::commands::git_log,
+            git::commands::git_show_commit,
+            git::commands::git_commit_files,
+            git::commands::git_commit_file_diff,
+            git::commands::git_remote_url,
+            shell::shell_run_command,
+            shell::shell_session_open,
+            shell::shell_session_run,
+            shell::shell_session_close,
+            shell::shell_bg_spawn,
+            shell::shell_bg_logs,
+            shell::shell_bg_kill,
+            shell::shell_bg_list,
+            workspace::wsl_list_distros,
+            workspace::wsl_default_distro,
+            workspace::wsl_home,
+            workspace::workspace_authorize,
+            workspace::workspace_current_dir,
+            open_settings_window,
+            secrets::secrets_get,
+            secrets::secrets_set,
+            secrets::secrets_delete,
+            secrets::secrets_get_all,
+            net::lm_ping,
+            net::ai_http_request,
+            net::ai_http_stream,
+            agents::session_commands::agent_session_list,
+            agents::session_commands::agent_session_load,
+            agents::session_commands::agent_session_close,
+            agents::session_commands::agent_session_delete,
+            agents::session_commands::agent_set_execution_mode,
+            agents::session_commands::agent_get_execution_mode,
+            agents::session_commands::agent_session_send,
+            agents::session_commands::agent_debug_enable,
+            agents::session_commands::agent_debug_disable,
+            agents::session_commands::agent_debug_messages,
+            agents::session_commands::agent_debug_stats,
+            agents::session_commands::agent_debug_clear,
+            agents::session_commands::agent_session_get_config,
+            agents::session_commands::agent_session_set_mode,
+            agents::session_commands::agent_session_set_model,
+            agents::session_commands::agent_list_models,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
