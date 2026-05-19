@@ -186,6 +186,7 @@ pub fn run() {
             agents::session_commands::agent_session_set_mode,
             agents::session_commands::agent_session_set_model,
             agents::session_commands::agent_list_models,
+            agents::discovery::agent_probe,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
