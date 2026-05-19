@@ -5,4 +5,5 @@ pub mod restoration;
 pub mod session_commands;
 pub mod session_store;
 pub mod acp_debug;
+pub mod discovery;
 pub mod session_config;

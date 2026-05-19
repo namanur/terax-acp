@@ -41,6 +41,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useMemo, useState } from "react";
 import { ProviderIcon } from "../components/ProviderIcon";
+import { AcpAgentsBlock } from "../components/AcpAgentsBlock";
 import { ProviderKeyCard } from "../components/ProviderKeyCard";
 import { SectionHeader } from "../components/SectionHeader";
 
@@ -98,6 +99,8 @@ export function ModelsSection() {
 
       <ExecutionModeToggle mode={executionMode} onModeChange={handleModeChange} />
 
+      <AcpAgentsBlock active={executionMode === "acp_agent"} />
+
       {executionMode === "api_provider" && (
         <>
           <DefaultModelBlock
@@ -139,7 +142,9 @@ export function ModelsSection() {
 
       {executionMode === "acp_agent" && (
         <div className="rounded-lg border border-border/60 bg-card/60 px-4 py-6 text-[12px] text-muted-foreground text-center">
-          ACP Agent mode is active. Terax will route prompts to the external agent for execution.
+          ACP Agent mode is active. Choose an ACP agent above and Terax will use
+          that configuration as the external agent target as the runtime wiring
+          fills in.
         </div>
       )}
 
